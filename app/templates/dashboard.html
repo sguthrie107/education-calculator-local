@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-controls">
+    <div class="control-group">
+        <label for="childSelect">View:</label>
+        <select id="childSelect" onchange="onChildSelectionChange()">
+            <option value="all" selected>All Children</option>
+            {% if children %}
+                {% for child in children %}
+                <option value="{{ child }}">{{ child }}</option>
+                {% endfor %}
+            {% endif %}
+        </select>
+    </div>
+    <div class="control-group deduction-path-group">
+        <label class="toggle-inline" for="deductionToggle">
+            <input type="checkbox" id="deductionToggle" onchange="onDeductionToggleChange()">
+            <span>Standard Deductions</span>
+        </label>
+        <span class="control-divider" aria-hidden="true"></span>
+        <label class="control-path-label" for="deductionPathSelect">College Path:</label>
+        <select id="deductionPathSelect" onchange="onDeductionPathChange()" disabled>
+            <option value="direct_4yr" selected>University (4-Year)</option>
+            <option value="blended_2plus2">Community College + University</option>
+        </select>
+    </div>
+</div>
+
+<div class="chart-container">
+    <h2 class="chart-title">Portfolio Projection</h2>
+    <div class="legend-grid">
+        <div class="legend-card">
+            <h3>529 Accounts</h3>
+            <div id="legend529" class="legend-items"></div>
+        </div>
+        <div class="legend-card">
+            <h3>Student Loan Payoffs</h3>
+            <div id="legendLoans" class="legend-items"></div>
+        </div>
+    </div>
+    <div class="chart-canvas-wrap">
+        <canvas id="educationChart"></canvas>
+    </div>
+</div>
+
+<div id="phaseSection" class="phase-section">
+    <h2>Investment Phase Allocations</h2>
+    <div id="phaseCards" class="phase-cards"></div>
+</div>
+
+<div id="snapshotSection" class="snapshot-section">
+    <h2>Account Snapshot</h2>
+    <div id="snapshotCards" class="snapshot-cards"></div>
+</div>
+
+<div id="fundingBreakdownSection" class="snapshot-section">
+    <h2>Education Funding Breakdown</h2>
+    <div id="fundingBreakdownCards" class="snapshot-cards"></div>
+</div>
+
+<div id="stressTestSection" class="stress-section">
+    <div class="stress-header">
+        <div>
+            <h2>Education Stress Test</h2>
+            <p>Monte Carlo simulation for a single 529 fund covering a 4-year university path.</p>
+        </div>
+        <button onclick="recalculateStressTest()" class="btn-primary" id="recalculateStressBtn">Recalculate Stress Test</button>
+    </div>
+    <div id="stressTestContent">
+        <p class="loading">Select a child to view the latest stress test result.</p>
+    </div>
+</div>
+
+<div id="deltaTable" class="delta-section">
+    <div class="delta-header">
+        <div>
+            <h2>Projected vs Actual by Child</h2>
+            <p>Rows are grouped per child and include phase, projected balance, actual balance, and delta.</p>
+        </div>
+        <button onclick="showBalanceForm()" class="btn-primary" id="addBalanceBtn">Add Actual Balance</button>
+    </div>
+    <div id="deltaContent">
+        <p class="loading">Loading comparison data...</p>
+    </div>
+</div>
+
+<div id="loanHistoryTable" class="delta-section">
+    <div class="delta-header">
+        <div>
+            <h2>Student Loan Payment History</h2>
+            <p>Record your actual monthly loan balances to track real payoff progress against the projections.</p>
+        </div>
+        <button onclick="showLoanBalanceForm()" class="btn-primary" id="addLoanBalanceBtn">Add Loan Balance</button>
+    </div>
+    <div id="loanHistoryContent">
+        <p class="loading">Loading loan history...</p>
+    </div>
+</div>
+
+<details class="faq-section faq-disclosure" aria-labelledby="educationFaqTitle">
+    <summary class="faq-disclosure-summary">
+        <span id="educationFaqTitle" class="faq-disclosure-title" role="heading" aria-level="2">Frequently Asked Questions</span>
+        <span class="faq-disclosure-description">Planning assumptions, diversified 529 investing, and education stress-test details.</span>
+    </summary>
+    <div class="faq-disclosure-content">
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary>Can a self-directed 529 plan help avoid AUM fees?</summary>
+                <div class="faq-answer">
+                    <p>Yes, if you are comfortable following a written savings and allocation plan. This dashboard keeps the contribution schedule, 529 allocation, education costs, and funding gap visible so you can manage a straightforward plan directly rather than automatically paying an ongoing assets-under-management fee. Advisors can still help with broader tax, estate, or family planning when that additional scope is worthwhile.</p>
+                </div>
+            </details>
+            <details class="faq-item">
+                <summary>How can a 529 be diversified with only a few funds?</summary>
+                <div class="faq-answer">
+                    <p>A few broad funds can still own thousands of underlying investments. The saved 529 allocation starts with U.S. total-market and international stock funds, then introduces a total-bond fund as college gets closer. That shifts the plan from 70% U.S. and 30% international stocks in the early years to a 40% stock and 40% bond mix during college. Diversification reduces single-company and single-market concentration, but it does not eliminate investment risk.</p>
+                </div>
+            </details>
+            <details class="faq-item">
+                <summary>What assumptions drive the education projection?</summary>
+                <div class="faq-answer">
+                    <p>The dashboard projects each child using the saved initial balance, monthly contribution amount and annual contribution growth, phase-based investment return assumptions, and the selected college path. It compares each 529 balance with the modeled student-loan payoff so you can view the combined funding picture.</p>
+                </div>
+            </details>
+            <details class="faq-item">
+                <summary>What changes when I switch the college path?</summary>
+                <div class="faq-answer">
+                    <p>The path toggle changes the cost schedule, not the investments. The direct path uses four years of public-university tuition and room and board; the blended path uses two years of community-college costs followed by two university years. Both plans use the saved inflation rate, and the withdrawal timeline targets 90% of modeled costs from the 529.</p>
+                </div>
+            </details>
+            <details class="faq-item">
+                <summary>What assumptions are behind the Monte Carlo stress test?</summary>
+                <div class="faq-answer">
+                    <p>Each refresh runs 10,000 independent paths for one child's 529 and the direct four-year university path. Annual returns are based on the allocation active at each age, then varied with asset-class volatility and normally distributed shocks through a lognormal return model. Tuition and room and board use the 2026 UNC Chapel Hill public-cost assumptions and the child's configured inflation rate. The result is a probability estimate, not a promise about markets or final college costs.</p>
+                </div>
+            </details>
+            <details class="faq-item">
+                <summary>What does a successful education stress-test path mean?</summary>
+                <div class="faq-answer">
+                    <p>A simulated path succeeds only when the 529 can pay the full modeled annual cost for all four university years without running out of money. Each child is tested independently, so a strong result for one 529 does not assume its balance can be used for another child's costs.</p>
+                </div>
+            </details>
+            <details class="faq-item">
+                <summary>Why do projected and actual balances differ?</summary>
+                <div class="faq-answer">
+                    <p>Differences usually come from real contribution timing, market returns, withdrawals, fund expenses, and changing tuition expectations. The projected-vs-actual table makes those gaps visible by child and year, giving you a practical signal for updating the next plan rather than treating an old projection as fixed.</p>
+                </div>
+            </details>
+        </div>
+    </div>
+</details>
+
+<!-- Balance entry form modal -->
+<div id="balanceModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="hideBalanceForm()">&times;</span>
+        <h2>Add Actual Balance</h2>
+        <form id="balanceForm" onsubmit="submitBalance(event)">
+            <div class="form-group">
+                <label for="balanceChild">Child:</label>
+                <select id="balanceChild" required>
+                    {% if children %}
+                        {% for child in children %}
+                        <option value="{{ child }}">{{ child }}</option>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="balanceYear">Year:</label>
+                <select id="balanceYear" required>
+                    <option value="">-- Select a year --</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="balanceAmount">Education Account Balance ($):</label>
+                <input type="number" id="balanceAmount" min="0" step="0.01" required>
+            </div>
+
+            <div class="form-group">
+                <label for="balanceNotes">Notes (optional):</label>
+                <textarea id="balanceNotes" rows="2"></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Save</button>
+                <button type="button" class="btn-secondary" onclick="hideBalanceForm()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit balance modal -->
+<div id="editBalanceModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="hideEditBalanceForm()">&times;</span>
+        <h2>Edit Balance Entry</h2>
+        <form id="editBalanceForm" onsubmit="submitEditBalance(event)">
+            <input type="hidden" id="editBalanceId">
+
+            <div class="form-group">
+                <label for="editYear">Year:</label>
+                <input type="number" id="editYear" disabled>
+            </div>
+
+            <div class="form-group">
+                <label for="editAmount">Balance ($):</label>
+                <input type="number" id="editAmount" min="0" step="0.01" required>
+            </div>
+
+            <div class="form-group">
+                <label for="editNotes">Notes (optional):</label>
+                <textarea id="editNotes" rows="2"></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Update</button>
+                <button type="button" class="btn-secondary" onclick="hideEditBalanceForm()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add loan balance modal -->
+<div id="loanBalanceModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="hideLoanBalanceForm()">&times;</span>
+        <h2>Add Loan Balance</h2>
+        <form id="loanBalanceForm" onsubmit="submitLoanBalance(event)">
+            <div class="form-group">
+                <label for="loanBalanceYear">Year:</label>
+                <select id="loanBalanceYear" required></select>
+            </div>
+
+            <div class="form-group">
+                <label for="loanBalanceMonth">Month:</label>
+                <select id="loanBalanceMonth" required>
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="loanBalanceAmount">Loan Balance ($):</label>
+                <input type="number" id="loanBalanceAmount" min="0" step="0.01" required>
+            </div>
+
+            <div class="form-group">
+                <label for="loanBalanceNotes">Notes (optional):</label>
+                <textarea id="loanBalanceNotes" rows="2"></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Save</button>
+                <button type="button" class="btn-secondary" onclick="hideLoanBalanceForm()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit loan balance modal -->
+<div id="editLoanBalanceModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="hideEditLoanBalanceForm()">&times;</span>
+        <h2>Edit Loan Balance</h2>
+        <form id="editLoanBalanceForm" onsubmit="submitEditLoanBalance(event)">
+            <input type="hidden" id="editLoanBalanceId">
+
+            <div class="form-group">
+                <label for="editLoanPeriod">Period:</label>
+                <input type="text" id="editLoanPeriod" disabled>
+            </div>
+
+            <div class="form-group">
+                <label for="editLoanAmount">Loan Balance ($):</label>
+                <input type="number" id="editLoanAmount" min="0" step="0.01" required>
+            </div>
+
+            <div class="form-group">
+                <label for="editLoanNotes">Notes (optional):</label>
+                <textarea id="editLoanNotes" rows="2"></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Update</button>
+                <button type="button" class="btn-secondary" onclick="hideEditLoanBalanceForm()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/chart.js?v=20260430"></script>
+<script>
+    const initialData = {{ initial_data | tojson | safe }};
+
+    function renderInitialData() {
+        try {
+            if (!initialData || !initialData.children || !initialData.children.length) {
+                document.getElementById('deltaContent').innerHTML =
+                    '<p class="loading">No children configured. Add entries to data/children.json.</p>';
+                return;
+            }
+            renderAllChildrenChart(initialData.children, initialData.household_loan || null);
+            renderPhaseCards(initialData.children);
+            renderSnapshotCards(initialData.children, initialData.household_loan || null);
+            renderFundingBreakdown(initialData.children);
+            renderAllDeltaTables(initialData.children);
+            renderLoanHistory(initialData.household_loan || null);
+            renderStressTestHintForAllChildren();
+        } catch (error) {
+            document.getElementById('deltaContent').innerHTML =
+                '<p style="color: var(--danger-color);">Error: ' + error.message + '</p>';
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderInitialData);
+    } else {
+        renderInitialData();
+    }
+</script>
+{% endblock %}
