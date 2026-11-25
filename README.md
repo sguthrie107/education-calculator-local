@@ -181,8 +181,17 @@ See [data/children.json](data/children.json) to adjust assumptions.
 
 ## Testing
 
+Install the development tools and enable the local checks once per clone:
+
 ```powershell
-cd education-calculator-local
+uv sync --group dev
+uv run pre-commit install
+```
+
+Run lint and tests locally:
+
+```powershell
+uv run ruff check .
 uv run pytest -q
 ```
 
